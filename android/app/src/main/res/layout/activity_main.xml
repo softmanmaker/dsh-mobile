@@ -18,7 +18,8 @@
     <ScrollView
         android:id="@+id/configScroll"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
+        android:layout_height="0dp"
+        android:layout_weight="1"
         android:fillViewport="true">
 
         <LinearLayout
@@ -137,6 +138,10 @@
                             android:gravity="top"
                             android:inputType="textMultiLine|textNoSuggestions"
                             android:minLines="3"
+                            android:maxLines="6"
+                            android:maxHeight="144dp"
+                            android:scrollbars="vertical"
+                            android:overScrollMode="ifContentScrolls"
                             android:importantForAutofill="no" />
                     </com.google.android.material.textfield.TextInputLayout>
 
@@ -236,6 +241,7 @@
         android:id="@+id/webView"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1" />
+        android:layout_weight="1"
+        android:visibility="gone" />
 
 </LinearLayout>

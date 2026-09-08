@@ -8,6 +8,8 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.text.method.ScrollingMovementMethod
+import android.view.MotionEvent
 import android.view.View
 import android.webkit.WebChromeClient
 import android.webkit.WebSettings
@@ -72,6 +74,7 @@ class MainActivity : AppCompatActivity() {
         statusTextView = findViewById(R.id.statusTextView)
         statusDot = findViewById(R.id.statusDot)
         configScroll = findViewById(R.id.configScroll)
+        setupPrivateKeyScrolling()
 
         setupWebView()
         requestNotificationPermissionIfNeeded()
@@ -130,6 +133,19 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    private fun setupPrivateKeyScrolling() {
+        privateKeyEditText.movementMethod = ScrollingMovementMethod()
+        privateKeyEditText.setOnTouchListener { view, event ->
+            if (view.hasFocus()) {
+                configScroll.requestDisallowInterceptTouchEvent(true)
+                if (event.actionMasked == MotionEvent.ACTION_UP) {
+                    configScroll.requestDisallowInterceptTouchEvent(false)
+                }
+            }
+            false
+        }
+    }
+
     private fun updateAuthModeUi() {
         val keyMode = privateKeyModeCheckBox.isChecked
         privateKeyLayout.isEnabled = keyMode
@@ -178,6 +194,7 @@ class MainActivity : AppCompatActivity() {
     private fun updateStatus() {
         statusTextView.text = SshTunnelState.message
         configScroll.visibility = if (SshTunnelState.connected) View.GONE else View.VISIBLE
+        webView.visibility = if (SshTunnelState.connected) View.VISIBLE else View.GONE
 
         when {
             SshTunnelState.connected -> {

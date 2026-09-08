@@ -5,6 +5,9 @@
     <string name="hint_ssh_port">SSH端口</string>
     <string name="hint_username">用户名</string>
     <string name="hint_password">密码</string>
+    <string name="hint_private_key_passphrase">私钥口令（可选）</string>
+    <string name="label_private_key_mode">私钥模式</string>
+    <string name="hint_private_key">私钥</string>
     <string name="hint_dsh_port">dsh端口</string>
     <string name="hint_local_port">本地端口</string>
     <string name="connect">连接</string>
@@ -12,4 +15,6 @@
     <string name="connecting">正在连接…</string>
     <string name="not_connected">未连接</string>
     <string name="config_invalid">请填写服务器、用户名和密码</string>
+    <string name="config_invalid_key">请填写服务器、用户名和私钥</string>
+    <string name="config_invalid_key_format">无法识别私钥格式</string>
 </resources>

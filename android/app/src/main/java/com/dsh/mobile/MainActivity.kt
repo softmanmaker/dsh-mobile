@@ -22,6 +22,8 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.dsh.mobile.SshTunnelService.SshConfig
 import com.google.android.material.button.MaterialButton
+import com.google.android.material.checkbox.MaterialCheckBox
+import com.google.android.material.textfield.TextInputLayout
 
 class MainActivity : AppCompatActivity() {
 
@@ -30,6 +32,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var sshPortEditText: EditText
     private lateinit var usernameEditText: EditText
     private lateinit var passwordEditText: EditText
+    private lateinit var passwordLayout: TextInputLayout
+    private lateinit var privateKeyModeCheckBox: MaterialCheckBox
+    private lateinit var privateKeyLayout: TextInputLayout
+    private lateinit var privateKeyEditText: EditText
     private lateinit var dshPortEditText: EditText
     private lateinit var localPortEditText: EditText
     private lateinit var connectButton: MaterialButton
@@ -56,6 +62,10 @@ class MainActivity : AppCompatActivity() {
         sshPortEditText = findViewById(R.id.sshPortEditText)
         usernameEditText = findViewById(R.id.usernameEditText)
         passwordEditText = findViewById(R.id.passwordEditText)
+        passwordLayout = findViewById(R.id.passwordLayout)
+        privateKeyModeCheckBox = findViewById(R.id.privateKeyModeCheckBox)
+        privateKeyLayout = findViewById(R.id.privateKeyLayout)
+        privateKeyEditText = findViewById(R.id.privateKeyEditText)
         dshPortEditText = findViewById(R.id.dshPortEditText)
         localPortEditText = findViewById(R.id.localPortEditText)
         connectButton = findViewById(R.id.connectButton)
@@ -73,6 +83,10 @@ class MainActivity : AppCompatActivity() {
         dshPortEditText.setText(prefs.getString("dsh_port", "3080"))
         localPortEditText.setText(prefs.getString("local_port", "3080"))
         passwordEditText.setText(prefs.getString("password", ""))
+        privateKeyEditText.setText(prefs.getString("private_key", ""))
+        privateKeyModeCheckBox.isChecked = prefs.getBoolean("use_private_key", false)
+        privateKeyModeCheckBox.setOnCheckedChangeListener { _, _ -> updateAuthModeUi() }
+        updateAuthModeUi()
 
         connectButton.setOnClickListener {
             if (SshTunnelState.connected) {
@@ -82,7 +96,7 @@ class MainActivity : AppCompatActivity() {
             } else {
                 val config = readConfig()
                 if (config == null) {
-                    Toast.makeText(this, R.string.config_invalid, Toast.LENGTH_SHORT).show()
+                    Toast.makeText(this, configErrorMessage(), Toast.LENGTH_SHORT).show()
                     return@setOnClickListener
                 }
                 saveConfig(config)
@@ -103,18 +117,49 @@ class MainActivity : AppCompatActivity() {
         super.onDestroy()
     }
 
+    private fun configErrorMessage(): Int {
+        val hostEmpty = hostEditText.text.toString().trim().isEmpty()
+        val usernameEmpty = usernameEditText.text.toString().trim().isEmpty()
+        val keyMode = privateKeyModeCheckBox.isChecked
+        val keyBlank = privateKeyEditText.text.toString().isBlank()
+        return when {
+            hostEmpty || usernameEmpty -> if (keyMode) R.string.config_invalid_key else R.string.config_invalid
+            keyMode && keyBlank -> R.string.config_invalid_key
+            keyMode -> R.string.config_invalid_key_format
+            else -> R.string.config_invalid
+        }
+    }
+
+    private fun updateAuthModeUi() {
+        val keyMode = privateKeyModeCheckBox.isChecked
+        privateKeyLayout.isEnabled = keyMode
+        privateKeyEditText.isEnabled = keyMode
+        passwordLayout.hint = getString(
+            if (keyMode) R.string.hint_private_key_passphrase else R.string.hint_password
+        )
+    }
+
     private fun readConfig(): SshConfig? {
         val host = hostEditText.text.toString().trim()
         val username = usernameEditText.text.toString().trim()
         val password = passwordEditText.text.toString()
+        val usePrivateKey = privateKeyModeCheckBox.isChecked
+        val privateKey = privateKeyEditText.text.toString().trim()
         val sshPort = sshPortEditText.text.toString().toIntOrNull() ?: 22
         val dshPort = dshPortEditText.text.toString().toIntOrNull() ?: 3080
         val localPort = localPortEditText.text.toString().toIntOrNull() ?: 3080
 
-        if (host.isEmpty() || username.isEmpty() || password.isEmpty()) {
+        if (host.isEmpty() || username.isEmpty()) {
             return null
         }
-        return SshConfig(host, sshPort, username, password, dshPort, localPort)
+        if (usePrivateKey) {
+            if (privateKey.isEmpty() || SshPrivateKey.detect(privateKey) == null) {
+                return null
+            }
+        } else if (password.isEmpty()) {
+            return null
+        }
+        return SshConfig(host, sshPort, username, password, dshPort, localPort, usePrivateKey, privateKey)
     }
 
     private fun saveConfig(config: SshConfig) {
@@ -123,6 +168,8 @@ class MainActivity : AppCompatActivity() {
             .putString("ssh_port", config.sshPort.toString())
             .putString("username", config.username)
             .putString("password", config.password)
+            .putBoolean("use_private_key", config.usePrivateKey)
+            .putString("private_key", config.privateKey)
             .putString("dsh_port", config.dshPort.toString())
             .putString("local_port", config.localPort.toString())
             .apply()

@@ -40,6 +40,11 @@ class SshTunnelService : Service() {
                 if (config != null) {
                     startForegroundWithNotification("正在连接 ${config.host} ...")
                     connect(config)
+                } else {
+                    SshTunnelState.connecting = false
+                    SshTunnelState.connected = false
+                    SshTunnelState.message = "连接失败：配置无效"
+                    stopSelf()
                 }
             }
             ACTION_DISCONNECT -> {
@@ -60,8 +65,9 @@ class SshTunnelService : Service() {
                 disconnectInternal()
 
                 val jsch = JSch()
+                applyAuthentication(jsch, config)
                 val session = jsch.getSession(config.username, config.host, config.sshPort)
-                session.setPassword(config.password)
+                applySessionAuth(session, config)
                 // MVP 先接受任何主机密钥；后续可加入 known_hosts 校验
                 session.setConfig("StrictHostKeyChecking", "no")
                 session.setConfig("ServerAliveInterval", "30")
@@ -89,6 +95,32 @@ class SshTunnelService : Service() {
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
             }
+        }
+    }
+
+    private fun applyAuthentication(jsch: JSch, config: SshConfig) {
+        if (!config.usePrivateKey) return
+        val passphrase = config.password
+            .takeIf { it.isNotEmpty() && SshPrivateKey.isEncrypted(config.privateKey) }
+            ?.toByteArray(Charsets.UTF_8)
+        jsch.addIdentity(
+            "dsh-mobile",
+            config.privateKey.toByteArray(Charsets.UTF_8),
+            null,
+            passphrase
+        )
+    }
+
+    private fun applySessionAuth(session: Session, config: SshConfig) {
+        if (config.usePrivateKey) {
+            val detected = SshPrivateKey.detect(config.privateKey)
+                ?: throw IllegalArgumentException("无法识别私钥格式")
+            session.setConfig("PreferredAuthentications", "publickey")
+            session.setConfig("PubkeyAcceptedAlgorithms", detected.pubkeyAcceptedAlgorithms)
+            session.setConfig("PubkeyAcceptedKeyTypes", detected.pubkeyAcceptedAlgorithms)
+        } else {
+            session.setPassword(config.password)
+            session.setConfig("PreferredAuthentications", "password,keyboard-interactive")
         }
     }
 
@@ -167,20 +199,31 @@ class SshTunnelService : Service() {
         val username: String,
         val password: String,
         val dshPort: Int,
-        val localPort: Int
+        val localPort: Int,
+        val usePrivateKey: Boolean = false,
+        val privateKey: String = ""
     ) {
         companion object {
             fun fromIntent(intent: Intent): SshConfig? {
                 val host = intent.getStringExtra(EXTRA_HOST) ?: return null
                 val username = intent.getStringExtra(EXTRA_USERNAME) ?: return null
-                val password = intent.getStringExtra(EXTRA_PASSWORD) ?: return null
+                val password = intent.getStringExtra(EXTRA_PASSWORD) ?: ""
+                val usePrivateKey = intent.getBooleanExtra(EXTRA_USE_PRIVATE_KEY, false)
+                val privateKey = intent.getStringExtra(EXTRA_PRIVATE_KEY) ?: ""
+                if (usePrivateKey) {
+                    if (privateKey.isBlank() || SshPrivateKey.detect(privateKey) == null) return null
+                } else if (password.isEmpty()) {
+                    return null
+                }
                 return SshConfig(
                     host = host,
                     sshPort = intent.getIntExtra(EXTRA_SSH_PORT, 22),
                     username = username,
                     password = password,
                     dshPort = intent.getIntExtra(EXTRA_DSH_PORT, 3080),
-                    localPort = intent.getIntExtra(EXTRA_LOCAL_PORT, 3080)
+                    localPort = intent.getIntExtra(EXTRA_LOCAL_PORT, 3080),
+                    usePrivateKey = usePrivateKey,
+                    privateKey = privateKey
                 )
             }
         }
@@ -195,6 +238,8 @@ class SshTunnelService : Service() {
         private const val EXTRA_SSH_PORT = "ssh_port"
         private const val EXTRA_USERNAME = "username"
         private const val EXTRA_PASSWORD = "password"
+        private const val EXTRA_USE_PRIVATE_KEY = "use_private_key"
+        private const val EXTRA_PRIVATE_KEY = "private_key"
         private const val EXTRA_DSH_PORT = "dsh_port"
         private const val EXTRA_LOCAL_PORT = "local_port"
 
@@ -205,6 +250,8 @@ class SshTunnelService : Service() {
                 putExtra(EXTRA_SSH_PORT, config.sshPort)
                 putExtra(EXTRA_USERNAME, config.username)
                 putExtra(EXTRA_PASSWORD, config.password)
+                putExtra(EXTRA_USE_PRIVATE_KEY, config.usePrivateKey)
+                putExtra(EXTRA_PRIVATE_KEY, config.privateKey)
                 putExtra(EXTRA_DSH_PORT, config.dshPort)
                 putExtra(EXTRA_LOCAL_PORT, config.localPort)
             }
